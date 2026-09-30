@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1d4ed8">
+<title>AST GC Test Prep</title>
+<link rel="manifest" href="manifest.json">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f1f5f9;color:#0f172a;line-height:1.4}
+#app{max-width:720px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
+header{position:sticky;top:0;z-index:5;background:#1d4ed8;color:#fff;display:flex;align-items:center;gap:10px;padding:10px 12px;padding-top:calc(10px + env(safe-area-inset-top,0px))}
+header h1{font-size:17px;margin:0;flex:1;text-align:center}
+header .sp{min-width:84px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+main{padding:14px;padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));flex:1}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:0;border-radius:14px;padding:15px 16px;font-size:17px;font-weight:700;color:#fff;background:#1d4ed8;cursor:pointer;margin:0 0 12px;box-shadow:0 2px 0 rgba(0,0,0,.15)}
+.btn:active{transform:translateY(1px)}
+.btn.green{background:#16a34a}.btn.orange{background:#ea580c}.btn.purple{background:#7c3aed}.btn.gray{background:#475569}.btn.red{background:#dc2626}
+.btn.sm{width:auto;padding:9px 14px;font-size:15px;margin:0;display:inline-flex;box-shadow:none}
+.btn.back{background:rgba(255,255,255,.2);color:#fff}
+.btn[disabled]{opacity:.4;cursor:not-allowed}
+.card{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.hero{text-align:center;padding:18px 8px}.hero h2{margin:0 0 4px;font-size:24px}.hero p{margin:0;color:#475569}
+.stats{display:flex;gap:10px;margin-bottom:14px}.stats div{flex:1;background:#fff;border-radius:12px;padding:10px;text-align:center}.stats b{display:block;font-size:22px;color:#1d4ed8}
+.row{display:flex;gap:10px;align-items:center}.row>*{flex:1}
+.subj{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;background:#fff;border:2px solid #dbeafe;border-radius:14px;padding:14px;margin-bottom:10px;font-size:16px;font-weight:600;color:#0f172a;cursor:pointer}
+.subj span{background:#dbeafe;color:#1d4ed8;border-radius:20px;padding:3px 10px;font-size:14px}
+.chk{display:flex;align-items:center;gap:12px;background:#fff;border:2px solid #e2e8f0;border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;font-weight:600}
+.chk input{width:22px;height:22px}.chk small{margin-left:auto;color:#64748b}
+label.f{display:block;font-weight:700;margin:12px 0 6px}
+input[type=number]{width:100%;padding:12px;font-size:18px;border:2px solid #cbd5e1;border-radius:12px}
+.prog{height:8px;background:#e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:12px}.prog i{display:block;height:100%;background:#16a34a}
+.qmeta{display:flex;justify-content:space-between;color:#64748b;font-size:14px;margin-bottom:8px;font-weight:600}
+.qtext{font-size:19px;font-weight:700;margin-bottom:14px}
+.opt{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#fff;border:2px solid #cbd5e1;border-radius:14px;padding:13px;margin-bottom:10px;font-size:17px;color:#0f172a;cursor:pointer}
+.opt .l{flex:none;width:32px;height:32px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-weight:800}
+.opt .t{flex:1}.opt .m{flex:none;font-size:22px;font-weight:900}
+.opt.ok{background:#dcfce7;border-color:#16a34a}.opt.ok .l{background:#16a34a;color:#fff}.opt.ok .m{color:#16a34a}
+.opt.no{background:#fee2e2;border-color:#dc2626}.opt.no .l{background:#dc2626;color:#fff}.opt.no .m{color:#dc2626}
+.opt.dim{opacity:.7}
+.nav{display:flex;gap:10px;margin-top:6px}.nav .btn{margin:0}
+.res{text-align:center}.res .big{font-size:56px;font-weight:900;margin:4px 0}.pass{color:#16a34a}.fail{color:#dc2626}
+.badge{display:inline-block;padding:8px 22px;border-radius:30px;color:#fff;font-weight:900;font-size:22px;letter-spacing:1px}
+.badge.pass{background:#16a34a;color:#fff}.badge.fail{background:#dc2626;color:#fff}
+.rv{border-left:6px solid #dc2626}.rv.g{border-left-color:#16a34a}
+.hist{display:flex;justify-content:space-between;align-items:center;gap:10px}.hist small{color:#64748b}
+.tag{font-weight:800;padding:4px 10px;border-radius:8px;color:#fff}.tag.pass{background:#16a34a}.tag.fail{background:#dc2626}
+.empty{text-align:center;color:#64748b;padding:30px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="questions.js"></script>
+<script>
+"use strict";
+var TOTAL=QUESTIONS.length;
+var LS="asttest_history_v1";
+var stack=[], timer=null, S=null;
+
+function h(tag,attrs){
+  var e=document.createElement(tag);attrs=attrs||{};
+  for(var k in attrs){
+    if(k==="class")e.className=attrs[k];
+    else if(k.slice(0,2)==="on")e.addEventListener(k.slice(2),attrs[k]);
+    else e.setAttribute(k,attrs[k]);
+  }
+  for(var i=2;i<arguments.length;i++)add(e,arguments[i]);
+  return e;
+}
+function add(e,c){
+  if(c==null||c===false)return;
+  if(Array.isArray(c))c.forEach(function(x){add(e,x)});
+  else e.appendChild(c.nodeType?c:document.createTextNode(String(c)));
+}
+function btn(label,cls,fn){return h("button",{class:"btn "+(cls||""),onclick:fn,type:"button"},label)}
+function shuffle(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t}return a}
+function pad(n){return n<10?"0"+n:""+n}
+function fmt(sec){sec=Math.max(0,Math.round(sec));return pad(Math.floor(sec/60))+":"+pad(sec%60)}
+function countOf(si){return QUESTIONS.filter(function(q){return q.s===si}).length}
+
+function getHist(){try{return JSON.parse(localStorage.getItem(LS)||"[]")}catch(e){return[]}}
+function saveHist(r){try{var a=getHist();a.unshift(r);localStorage.setItem(LS,JSON.stringify(a.slice(0,100)))}catch(e){}}
+
+/* ---------- navigation ---------- */
+function stopTimer(){if(timer){clearInterval(timer);timer=null}}
+function go(fn){stack.push(fn);fn()}
+function back(){if(stack.length>1){stack.pop();stack[stack.length-1]()}}
+function goHome(){stack=[home];home()}
+function frame(title,body,opts){
+  opts=opts||{};
+  var app=document.getElementById("app");app.innerHTML="";
+  var left=opts.noBack?h("span",{class:"sp"}):h("button",{class:"btn sm back",type:"button",onclick:opts.onBack||back},"\u2190 Back");
+  var right=h("span",{class:"sp",id:"rt"},opts.right||"");
+  app.appendChild(h("header",{},left,h("h1",{},title),right));
+  app.appendChild(h("main",{},body));
+  window.scrollTo(0,0);
+}
+
+/* ---------- home ---------- */
+function home(){
+  stopTimer();
+  var hist=getHist();
+  frame("AST GC Test Prep",[
+    h("div",{class:"hero"},h("h2",{},"Test Preparation"),h("p",{},"Cpl Tech AHMAD GHANI \u2022 😎")),
+    h("div",{class:"stats"},
+      h("div",{},h("b",{},TOTAL),"Questions"),
+      h("div",{},h("b",{},SUBJECTS.length),"Subjects"),
+      h("div",{},h("b",{},hist.length),"Tests taken")),
+    btn("\uD83D\uDCDA  Practice by Subject","",function(){go(subjectList)}),
+    btn("\u26A1  Quick Test (50 random questions)","green",quickTest),
+    btn("\uD83D\uDCDD  Custom Test (choose subjects, count, time)","orange",function(){go(testSetup)}),
+    btn("\uD83C\uDFC1  Practice All "+TOTAL+" Questions","purple",function(){
+      startSession({title:"All Questions",qs:QUESTIONS.slice(),limit:0,pass:50,mode:"practice"})}),
+    btn("\uD83D\uDD52  Results History","gray",function(){go(history)})
+  ],{noBack:true});
+}
+
+/* ---------- subject list ---------- */
+var shuf=false;
+function subjectList(){
+  stopTimer();
+  var cb=h("input",{type:"checkbox",id:"shuf"});cb.checked=shuf;
+  cb.addEventListener("change",function(){shuf=cb.checked});
+  var list=SUBJECTS.map(function(name,i){
+    return h("button",{class:"subj",type:"button",onclick:function(){
+      var qs=QUESTIONS.filter(function(q){return q.s===i});
+      startSession({title:name,qs:shuf?shuffle(qs):qs,limit:0,pass:50,mode:"practice"});
+    }},name,h("span",{},countOf(i)+" Q"));
+  });
+  frame("Practice by Subject",[
+    h("label",{class:"chk"},cb,"Shuffle questions"),
+    list
+  ]);
+}
+
+/* ---------- quick + custom test ---------- */
+function quickTest(){
+  startSession({title:"Quick Test",qs:shuffle(QUESTIONS).slice(0,50),limit:50*60,pass:50,mode:"test"});
+}
+function testSetup(){
+  stopTimer();
+  var sel=SUBJECTS.map(function(){return false});
+  var boxes=[];
+  var poolNote=h("div",{class:"card",id:"pool"},"Select at least one subject");
+  var nIn=h("input",{type:"number",min:"1",value:"50",id:"n"});
+  var tIn=h("input",{type:"number",min:"0",value:"50",id:"t"});
+  var pIn=h("input",{type:"number",min:"1",max:"100",value:"50",id:"p"});
+  function pool(){var c=0;sel.forEach(function(v,i){if(v)c+=countOf(i)});return c}
+  function upd(){var c=pool();poolNote.textContent=c?("Available questions in selected subjects: "+c):"Select at least one subject"}
+  var rows=SUBJECTS.map(function(name,i){
+    var c=h("input",{type:"checkbox"});boxes.push(c);
+    c.addEventListener("change",function(){sel[i]=c.checked;upd()});
+    return h("label",{class:"chk"},c,name,h("small",{},countOf(i)+" Q"));
+  });
+  function all(v){boxes.forEach(function(b,i){b.checked=v;sel[i]=v});upd()}
+  frame("Custom Test",[
+    h("div",{class:"row"},btn("Select All","gray sm",function(){all(true)}),btn("Clear","gray sm",function(){all(false)})),
+    h("div",{style:"height:12px"}),
+    rows, poolNote,
+    h("label",{class:"f"},"Number of questions (default 50)"),nIn,
+    h("label",{class:"f"},"Time in minutes (0 = no timer)"),tIn,
+    h("label",{class:"f"},"Pass mark % (default 50)"),pIn,
+    h("div",{style:"height:16px"}),
+    btn("\u25B6  Start Test","green",function(){
+      var c=pool();
+      if(!c){alert("Please select at least one subject.");return}
+      var n=parseInt(nIn.value,10),t=parseFloat(tIn.value),p=parseFloat(pIn.value);
+      if(!(n>0)){alert("Enter a valid number of questions.");return}
+      if(!(t>=0))t=0; if(!(p>0&&p<=100))p=50;
+      if(n>c){n=c}
+      var qs=shuffle(QUESTIONS.filter(function(q){return sel[q.s]})).slice(0,n);
+      var names=SUBJECTS.filter(function(_,i){return sel[i]});
+      startSession({title:names.length===1?names[0]+" Test":"Custom Test",qs:qs,limit:Math.round(t*60),pass:p,mode:"test"});
+    })
+  ]);
+}
+
+/* ---------- quiz ---------- */
+function startSession(cfg){
+  S={title:cfg.title,qs:cfg.qs,i:0,ans:new Array(cfg.qs.length).fill(-1),limit:cfg.limit,pass:cfg.pass,mode:cfg.mode,start:Date.now(),done:false};
+  stack.push(quiz);quiz();
+}
+function quitQuiz(){
+  if(confirm("Leave this quiz? Your progress will be lost.")){stopTimer();S=null;back()}
+}
+function tick(){
+  var left=S.limit-(Date.now()-S.start)/1000;
+  var el=document.getElementById("rt");
+  if(el){el.textContent=fmt(left);el.style.color=left<60?"#fecaca":"#fff"}
+  if(left<=0){stopTimer();alert("Time is up!");finish()}
+}
+function quiz(){
+  if(!S){goHome();return}
+  stopTimer();
+  var q=S.qs[S.i],chosen=S.ans[S.i],last=S.i===S.qs.length-1;
+  var answered=chosen>=0;
+  var opts=q.o.map(function(t,k){
+    var cls="opt",mark="";
+    if(answered){
+      if(k===q.a){cls+=" ok";mark="\u2714"}
+      else if(k===chosen){cls+=" no";mark="\u2718"}
+      else cls+=" dim";
+    }
+    return h("button",{class:cls,type:"button",onclick:function(){
+      if(S.ans[S.i]>=0)return;S.ans[S.i]=k;quiz();
+    }},h("span",{class:"l"},String.fromCharCode(65+k)),h("span",{class:"t"},t),h("span",{class:"m"},mark));
+  });
+  var correctSoFar=0,doneSoFar=0;
+  S.ans.forEach(function(a,i){if(a>=0){doneSoFar++;if(a===S.qs[i].a)correctSoFar++}});
+  var body=[
+    h("div",{class:"prog"},h("i",{style:"width:"+(doneSoFar/S.qs.length*100)+"%"})),
+    h("div",{class:"qmeta"},h("span",{},"Question "+(S.i+1)+" of "+S.qs.length),h("span",{},"Bank #"+q.n+" \u2022 "+SUBJECTS[q.s])),
+    h("div",{class:"card"},h("div",{class:"qtext"},q.q)),
+    opts,
+    answered?h("div",{class:"card",style:"font-weight:700;color:"+(chosen===q.a?"#16a34a":"#dc2626")},
+      chosen===q.a?"\u2714 Correct!":"\u2718 Wrong \u2014 correct answer: "+String.fromCharCode(65+q.a)+") "+q.o[q.a]):null,
+    h("div",{class:"nav"},
+      btn("\u2190 Previous","gray",function(){if(S.i>0){S.i--;quiz()}}),
+      last?btn("Finish \u2714","green",tryFinish):btn("Next \u2192","",function(){S.i++;quiz()})),
+    h("div",{style:"height:12px"}),
+    last?null:btn("Finish Now","orange",tryFinish)
+  ];
+  var prev=document.querySelectorAll("button.nav");
+  frame(S.title,body,{onBack:quitQuiz,right:S.limit?fmt(S.limit-(Date.now()-S.start)/1000):("\u2714 "+correctSoFar+"/"+doneSoFar)});
+  var prevBtn=document.querySelector(".nav .btn");if(prevBtn&&S.i===0)prevBtn.disabled=true;
+  if(S.limit)timer=setInterval(tick,1000);
+}
+function tryFinish(){
+  var un=S.ans.filter(function(a){return a<0}).length;
+  if(un>0&&!confirm(un+" question(s) unanswered. Finish anyway?"))return;
+  finish();
+}
+function finish(){
+  stopTimer();
+  var correct=0;S.ans.forEach(function(a,i){if(a===S.qs[i].a)correct++});
+  var total=S.qs.length,pct=Math.round(correct/total*1000)/10;
+  S.correct=correct;S.pct=pct;S.pass_ok=pct>=S.pass;S.secs=Math.round((Date.now()-S.start)/1000);S.done=true;
+  saveHist({date:new Date().toLocaleString(),title:S.title,total:total,correct:correct,pct:pct,pass:S.pass_ok,secs:S.secs});
+  stack=[home,result];result();
+}
+
+/* ---------- result / review ---------- */
+function result(){
+  stopTimer();
+  var un=S.ans.filter(function(a){return a<0}).length,wrong=S.qs.length-S.correct-un;
+  var wrongQs=S.qs.filter(function(q,i){return S.ans[i]!==q.a});
+  frame("Result",[
+    h("div",{class:"card res"},
+      h("span",{class:"badge "+(S.pass_ok?"pass":"fail")},S.pass_ok?"PASS":"FAIL"),
+      h("div",{class:"big "+(S.pass_ok?"pass":"fail")},S.pct+"%"),
+      h("div",{},S.correct+" correct out of "+S.qs.length+" (pass mark "+S.pass+"%)"),
+      h("div",{style:"color:#64748b;margin-top:6px"},"Wrong: "+wrong+" \u2022 Unanswered: "+un+" \u2022 Time: "+fmt(S.secs))),
+    btn("\uD83D\uDD0D  Review All Answers","",function(){go(function(){review(false)})}),
+    wrongQs.length?btn("\u274C  Review Wrong / Unanswered ("+wrongQs.length+")","orange",function(){go(function(){review(true)})}):null,
+    wrongQs.length?btn("\uD83D\uDD01  Retry Wrong Questions","purple",function(){
+      startSession({title:"Retry: "+S.title,qs:wrongQs.slice(),limit:0,pass:S.pass,mode:"practice"})}):null,
+    btn("\uD83C\uDFE0  Home","green",goHome)
+  ],{onBack:goHome});
+}
+function review(onlyWrong){
+  var items=[];
+  S.qs.forEach(function(q,i){
+    var a=S.ans[i],ok=a===q.a;
+    if(onlyWrong&&ok)return;
+    items.push(h("div",{class:"card rv "+(ok?"g":"")},
+      h("div",{class:"qmeta"},h("span",{},"Q"+(i+1)+" \u2022 Bank #"+q.n),h("span",{},SUBJECTS[q.s])),
+      h("div",{class:"qtext",style:"font-size:17px"},q.q),
+      q.o.map(function(t,k){
+        var cls="opt",m="";
+        if(k===q.a){cls+=" ok";m="\u2714"}else if(k===a){cls+=" no";m="\u2718"}else cls+=" dim";
+        return h("div",{class:cls,style:"cursor:default;margin-bottom:8px"},h("span",{class:"l"},String.fromCharCode(65+k)),h("span",{class:"t"},t),h("span",{class:"m"},m));
+      }),
+      a<0?h("div",{style:"color:#ea580c;font-weight:700"},"Not answered"):null));
+  });
+  frame(onlyWrong?"Wrong Answers":"Review",[items.length?items:h("div",{class:"empty"},"Nothing to review \u2014 great job!"),btn("\uD83C\uDFE0  Home","green",goHome)]);
+}
+
+/* ---------- history ---------- */
+function history(){
+  stopTimer();
+  var hs=getHist();
+  frame("Results History",[
+    hs.length?hs.map(function(r){
+      return h("div",{class:"card hist"},
+        h("div",{},h("b",{},r.title),h("br"),h("small",{},r.date+" \u2022 "+fmt(r.secs))),
+        h("div",{style:"text-align:right"},h("div",{style:"font-weight:800"},r.correct+"/"+r.total+" ("+r.pct+"%)"),h("span",{class:"tag "+(r.pass?"pass":"fail")},r.pass?"PASS":"FAIL")));
+    }):h("div",{class:"empty"},"No tests taken yet."),
+    hs.length?btn("\uD83D\uDDD1  Clear History","red",function(){
+      if(confirm("Delete all saved results?")){try{localStorage.removeItem(LS)}catch(e){}history()}}):null,
+    btn("\uD83C\uDFE0  Home","green",goHome)
+  ]);
+}
+
+goHome();
+if("serviceWorker" in navigator&&/^https?:$/.test(location.protocol)){
+  window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})});
+}
+</script>
+</body>
+</html>
